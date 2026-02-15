@@ -11,7 +11,7 @@ load_dotenv()
 gemini_api_key = os.getenv("GOOGLE_API_KEY")
 
 # Initialize Gemini 2.5 Flash model
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash",
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite",
     google_api_key=gemini_api_key,
     temperature=0.7
 )
@@ -19,29 +19,33 @@ llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash",
 class State(TypedDict):
     topic:str
     joke:str
-    imporoved_joke:str
+    improved_joke: str
     final_joke:str
 
 #------------------------ Define the functions------------------------
 
-def generate_joke(state:State):
-    """First call to llm to generate a joke"""
-    msg = llm.invoke(f"write a short joke about: {state['topic']}")
-    return {"joke":msg.content}
-def improve_joke(state:State):
+# Nodes
+def generate_joke(state: State):
+    """First LLM call to generate initial joke"""
+    msg = llm.invoke(f"Write a short joke about {state['topic']}")
+    return {"joke": msg.content}
+
+def improve_joke(state: State):
     """Second LLM call to improve the joke"""
-    msg =  llm.invoke(f"Make this joke funnier by  adding wordplay or pun: {state['joke']}")
-    return {"imporoved_joke":msg.content}
+    msg = llm.invoke(f"Make this joke funnier by adding wordplay: {state['joke']}")
+    return {"improved_joke": msg.content}
 
-def polish_joke(state:State):
-    """ Third LLM call to polish the joke"""
-    msg =  llm.invoke(f"Add a surprising twist to the joke: {state['imporoved_joke']}")
-    return {"final_joke":msg.content}
 
-def check_punchline(state:State):
-    """ Gate function to check if the joke has a punchline"""
-    msg = llm.invoke(f"Is this joke funny? {state['final_joke']}")
-    if "?" in state['joke'] or "!" in state['joke']:
+def polish_joke(state: State):
+    """Third LLM call for final polish"""
+    msg = llm.invoke(f"Add a surprising twist to this joke: {state['improved_joke']}")
+    return {"final_joke": msg.content}
+
+# Conditional edge function to check if the joke has a punchline
+def check_punchline(state: State):
+    """Gate function to check if the joke has a punchline"""
+    # Simple check - does the joke contain "?" or "!"
+    if "?" in state["joke"] or "!" in state["joke"]:
         return "Pass"
     return "Fail"
 
@@ -53,15 +57,11 @@ workflow = StateGraph(State)
 workflow.add_node("generate_joke", generate_joke)
 workflow.add_node("improve_joke", improve_joke)
 workflow.add_node("polish_joke", polish_joke)
-workflow.add_node("check_punchline", check_punchline)
 
 #Adding edges
 workflow.add_edge(START, "generate_joke")
 workflow.add_conditional_edges(
-    "generate_joke", check_punchline,{
-    "Pass": "improve_joke",
-    "Fail": END
-    }
+    "generate_joke", check_punchline, {"Pass": "improve_joke", "Fail": END}
 )
 workflow.add_edge("improve_joke", "polish_joke")
 workflow.add_edge("polish_joke", END)
@@ -73,3 +73,18 @@ chain = workflow.compile()
 # Save workflow as image
 with open("graph.png", "wb") as f:
     f.write(chain.get_graph().draw_mermaid_png())
+
+#------------------------ Run the workflow------------------------
+state =  chain.invoke({"topic":"cats"})
+print("Initial joke: ")
+print(state["joke"])
+print("\n--- --- ---\n")
+if "improved_joke" in state:
+    print("Improved joke:")
+    print(state["improved_joke"])
+    print("\n--- --- ---\n")
+
+    print("Final joke:")
+    print(state["final_joke"])
+else:
+    print("Joke failed quality gate - no punchline detected!")

@@ -1,0 +1,11 @@
+# Optional packages that may cause Windows Long Path issues
+# Install these separately if needed:
+# pip install jupyter
+# pip install ipykernel
+# pip install faiss-cpu
+# pip install chromadb
+
+jupyter>=1.0.0
+ipykernel>=6.20.0
+faiss-cpu>=1.7.4
+chromadb>=0.4.0
